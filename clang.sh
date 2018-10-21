@@ -19,7 +19,11 @@ ARCH=arm64
 ## Always use all threads
 THREADS=$(nproc --all)
 export CLANG_PATH=~/gclang/bin
-export PA"
+export PATH=${CLANG_PATH}:${PATH}
+export CLANG_TRIPLE=aarch64-linux-gnu-
+export CROSS_COMPILE=~/SK/gcc/bin/aarch64-linux-android-
+export CROSS_COMPILE_ARM32=~/SK/gcc32/bin/arm-linux-androideabi-
+
 
 # Paths
 KERNEL_DIR=`pwd`
