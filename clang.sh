@@ -45,8 +45,8 @@ ZIMAGE_DIR=~/Android/kernel/EAS/arch/arm64/boot
 
 function make_kernel {
 		echo
-		make $DEFCONFIG
-		make ARCH=${ARCH} CC=clang -j${THREADS}
+		make O=out $DEFCONFIG
+		make O=out ARCH=${ARCH} CC=clang -j${THREADS}
 
 }
 
