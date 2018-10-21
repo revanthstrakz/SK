@@ -24,7 +24,7 @@ ARCH=arm64
 
 ## Always use all threads
 THREADS=$(nproc --all)
-export CLANG_PATH=~/gclang/bin
+export CLANG_PATH=~/SK/gclang/bin
 export PATH=${CLANG_PATH}:${PATH}
 export CLANG_TRIPLE=aarch64-linux-gnu-
 export CROSS_COMPILE=~/SK/gcc/bin/aarch64-linux-android-
