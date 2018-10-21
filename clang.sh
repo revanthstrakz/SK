@@ -4,12 +4,14 @@ green='\033[01;32m'
 red='\033[01;31m'
 blink_red='\033[05;31m'
 restore='\033[0m'
+function install_package {
 echo "installing dependencies"
 
 
 install-package ccache bc bash libncurses5-dev git-core gnupg flex bison gperf build-essential \
 zip curl libc6-dev ncurses-dev binfmt-support libllvm-3.6-ocaml-dev llvm-3.6 llvm-3.6-dev llvm-3.6-runtime \
 cmake automake autogen autoconf autotools-dev libtool shtool python m4 gcc libtool zlib1g-dev
+}
 
 # Resources
 THREAD="-j$(grep -c ^processor /proc/cpuinfo)"
