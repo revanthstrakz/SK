@@ -28,9 +28,7 @@
 #include <linux/slab.h>
 #include <linux/suspend.h>
 #include <linux/tick.h>
-#ifdef CONFIG_SMP
 #include <linux/sched.h>
-#endif
 #include <trace/events/power.h>
 
 /**
@@ -495,6 +493,7 @@ wait:
 	spin_unlock(&policy->transition_lock);
 
 	scale_freq_capacity(policy->cpus, freqs->new, policy->cpuinfo.max_freq);
+
 	for_each_cpu(cpu, policy->cpus)
 		trace_cpu_capacity(capacity_curr_of(cpu), cpu);
 
@@ -626,8 +625,25 @@ static int cpufreq_parse_governor(char *str_governor, unsigned int *policy,
 			ret = request_module("cpufreq_%s", str_governor);
 			mutex_lock(&cpufreq_governor_mutex);
 
+			/*
+			 * At this point, if the governor was found via module
+			 * search, it will load it. However, if it didn't, we
+			 * are just going to exit without doing anything to
+			 * the governor. Most of the time, this is totally
+			 * fine; the one scenario where it's not is when a ROM
+			 * has a boot script that requests a governor that
+			 * exists in the default kernel but not in this one.
+			 * This kernel (and nearly every other Android kernel)
+			 * has the performance governor as default for boot
+			 * performance which is then changed to another,
+			 * usually interactive. So, instead of just exiting if
+			 * the requested governor wasn't found, let's try
+			 * falling back to interactive before falling out.
+			 */
 			if (ret == 0)
 				t = __find_governor(str_governor);
+			else
+				t = __find_governor("interactive");
 		}
 
 		if (t != NULL) {
@@ -687,7 +703,9 @@ static ssize_t store_##file_name					\
 	int ret;							\
 	struct cpufreq_policy new_policy;				\
 									\
-	memcpy(&new_policy, policy, sizeof(*policy));			\
+	ret = cpufreq_get_policy(&new_policy, policy->cpu);		\
+	if (ret)							\
+		return -EINVAL;						\
 									\
 	new_policy.min = new_policy.user_policy.min;			\
 	new_policy.max = new_policy.user_policy.max;			\
@@ -720,9 +738,11 @@ static ssize_t show_cpuinfo_cur_freq(struct cpufreq_policy *policy,
 					char *buf)
 {
 	unsigned int cur_freq = __cpufreq_get(policy->cpu);
-	if (!cur_freq)
-		return sprintf(buf, "<unknown>");
-	return sprintf(buf, "%u\n", cur_freq);
+	
+	if (cur_freq)
+		return sprintf(buf, "%u\n", cur_freq);
+	
+	return sprintf(buf, "<unknown>\n");
 }
 
 /**
@@ -750,7 +770,9 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 	char	str_governor[16];
 	struct cpufreq_policy new_policy;
 
-	memcpy(&new_policy, policy, sizeof(*policy));
+	ret = cpufreq_get_policy(&new_policy, policy->cpu);
+	if (ret)
+		return ret;
 
 	ret = sscanf(buf, "%15s", str_governor);
 	if (ret != 1)
@@ -1378,6 +1400,9 @@ static int __cpufreq_add_dev(struct device *dev, struct subsys_interface *sif)
 	if (!recover_policy) {
 		policy->user_policy.min = policy->min;
 		policy->user_policy.max = policy->max;
+	} else {
+		policy->min = policy->user_policy.min;
+		policy->max = policy->user_policy.max;
 	}
 
 	down_write(&policy->rwsem);
