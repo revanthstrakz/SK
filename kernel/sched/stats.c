@@ -12,7 +12,6 @@
  */
 #define SCHEDSTAT_VERSION 15
 
-#ifdef CONFIG_SMP
 static inline void show_easstat(struct seq_file *seq, struct eas_stats *stats)
 {
 	/* eas-specific runqueue stats */
@@ -25,14 +24,15 @@ static inline void show_easstat(struct seq_file *seq, struct eas_stats *stats)
 	    stats->secb_insuff_cap, stats->secb_no_nrg_sav,
 	    stats->secb_nrg_sav, stats->secb_count);
 
-	seq_printf(seq, "%llu %llu %llu %llu %llu ",
+	seq_printf(seq, "%llu %llu %llu %llu %llu %llu %llu %llu ",
 	    stats->fbt_attempts, stats->fbt_no_cpu, stats->fbt_no_sd,
-	    stats->fbt_pref_idle, stats->fbt_count);
+	    stats->fbt_pref_idle, stats->fbt_pref_idle_lum,
+	    stats->fbt_best_active, stats->fbt_best_idle,
+	    stats->fbt_count);
 
 	seq_printf(seq, "%llu %llu\n",
 	    stats->cas_attempts, stats->cas_count);
 }
-#endif
 
 static int show_schedstat(struct seq_file *seq, void *v)
 {
@@ -66,9 +66,8 @@ static int show_schedstat(struct seq_file *seq, void *v)
 
 		seq_printf(seq, "\n");
 
-#ifdef CONFIG_SMP
 		show_easstat(seq, &rq->eas_stats);
-
+#ifdef CONFIG_SMP
 		/* domain-specific stats */
 		rcu_read_lock();
 		for_each_domain(cpu, sd) {

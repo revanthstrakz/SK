@@ -98,11 +98,7 @@ SCHED_FEAT(NUMA_RESIST_LOWER, false)
  * Energy aware scheduling. Use platform energy model to guide scheduling
  * decisions optimizing for energy efficiency.
  */
-#ifdef CONFIG_DEFAULT_USE_ENERGY_AWARE
 SCHED_FEAT(ENERGY_AWARE, true)
-#else
-SCHED_FEAT(ENERGY_AWARE, false)
-#endif
 
 /*
  * Minimum capacity capping. Keep track of minimum capacity factor when
@@ -110,7 +106,7 @@ SCHED_FEAT(ENERGY_AWARE, false)
  * If enabled, this can be used to inform the scheduler about capacity
  * restrictions.
  */
-SCHED_FEAT(MIN_CAPACITY_CAPPING, false)
+SCHED_FEAT(MIN_CAPACITY_CAPPING, true)
 
 /*
  * Enforce the priority of candidates selected by find_best_target()
@@ -128,4 +124,4 @@ SCHED_FEAT(FBT_STRICT_ORDER, false)
  * If disabled, this behaviour will only apply to tasks of the
  * RT class.
  */
-SCHED_FEAT(SCHEDTUNE_BOOST_HOLD_ALL, false)
+SCHED_FEAT(SCHEDTUNE_BOOST_HOLD_ALL, true)
