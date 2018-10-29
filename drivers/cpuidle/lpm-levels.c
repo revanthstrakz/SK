@@ -122,10 +122,6 @@ module_param_named(
 	print_parsed_dt, print_parsed_dt, bool, S_IRUGO | S_IWUSR | S_IWGRP
 );
 
-static bool sleep_disabled;
-module_param_named(sleep_disabled,
-	sleep_disabled, bool, S_IRUGO | S_IWUSR | S_IWGRP);
-
 s32 msm_cpuidle_get_deep_idle_latency(void)
 {
 	return 10;
@@ -455,9 +451,6 @@ static int cpu_power_select(struct cpuidle_device *dev,
 	if (!cpu)
 		return -EINVAL;
 
-	if (sleep_disabled || sleep_us  < 0)
-		return 0;
-
 	next_event_us = (uint32_t)(ktime_to_us(get_next_event_time(dev->cpu)));
 
 	for (i = 0; i < cpu->nlevels; i++) {
@@ -468,6 +461,7 @@ static int cpu_power_select(struct cpuidle_device *dev,
 		bool allow;
 
 		allow = lpm_cpu_mode_allow(dev->cpu, i, true);
+		allow &= !(dev->states_usage[i].disable);
 
 		if (!allow)
 			continue;
@@ -1064,6 +1058,9 @@ exit:
 
 	cluster_unprepare(cluster, cpumask, idx, true, end_time);
 	cpu_unprepare(cluster, idx, true);
+
+	sched_set_cpu_cstate(smp_processor_id(), 0, 0, 0);
+
 	trace_cpu_idle_exit(idx, success);
 	end_time = ktime_to_ns(ktime_get()) - start_time;
 	dev->last_residency = do_div(end_time, 1000);
