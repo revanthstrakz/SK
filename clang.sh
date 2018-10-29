@@ -26,11 +26,11 @@ ARCH=arm64
 
 ## Always use all threads
 THREADS=$(nproc --all)
-export CLANG_PATH=~/SK/gclang/bin
+export CLANG_PATH=~/syb/gclang/bin
 export PATH=${CLANG_PATH}:${PATH}
 export CLANG_TRIPLE=aarch64-linux-gnu-
-export CROSS_COMPILE=~/SK/gcc/bin/aarch64-linux-android-
-export CROSS_COMPILE_ARM32=~/SK/gcc32/bin/arm-linux-androideabi-
+export CROSS_COMPILE=~/syb/gcc/bin/aarch64-linux-android-
+export CROSS_COMPILE_ARM32=~/syb/gcc32/bin/arm-linux-androideabi-
 
 
 # Paths
@@ -40,6 +40,16 @@ REPACK_DIR=~/asshole
 PATCH_DIR=~
 ZIP_MOVE=~/Android/kernel/AK-releases/
 ZIMAGE_DIR=~/Android/kernel/EAS/arch/arm64/boot
+
+# Vars
+BASE_AK_VER="SK-Legend"
+AK_VER="$BASE_AK_VER$VER"
+ZIP_NAME="$AK_VER"-"$DATE"
+export ARCH=arm64
+export SUBARCH=arm64
+export KBUILD_BUILD_USER=REVANTH
+export KBUILD_BUILD_HOST=STRAKZ
+
 
 # Functions
 
@@ -66,7 +76,7 @@ function make_zip {
 		cp $KERNEL_DIR/arch/arm64/boot/dts/qcom/msm8953-qrd-sku3-mido-nontreble.dtb $REPACK_DIR/treble-unsupported/
 		cp $KERNEL_DIR/arch/arm64/boot/dts/qcom/msm8953-qrd-sku3-mido-treble.dtb $REPACK_DIR/treble-supported/
 		cp $KERNEL_DIR/arch/arm64/boot/Image.gz $REPACK_DIR/kernel/
-		zip -r9 `echo $ZIP_NAME.zip * 
+		zip -r9 echo $ZIP_NAME.zip * 
                 transfer "$ZIP_NAME.zip"
 		cd $KERNEL_DIR
 }
@@ -82,24 +92,5 @@ echo "-----------------"
 echo -e "${restore}"
 
 
-# Vars
-BASE_AK_VER="SK-Legend"
-DATE=`date +"%Y%m%d-%H%M"`
-AK_VER="$BASE_AK_VER$VER"
-ZIP_NAME="$AK_VER"-"$DATE"
-export LOCALVERSION=~`echo $AK_VER`
-export LOCALVERSION=~`echo $AK_VER`
-export ARCH=arm64
-export SUBARCH=arm64
-export KBUILD_BUILD_USER=REVANTH
-export KBUILD_BUILD_HOST=STRAKZ
-
-echo
-
 make_kernel 
 make_zip
-DATE_END=$(date +"%s")
-DIFF=$(($DATE_END - $DATE_START))
-echo "Time: $(($DIFF / 60)) minute(s) and $(($DIFF % 60)) seconds."
-echo
-
