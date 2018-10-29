@@ -25,7 +25,6 @@
 #include <linux/list.h>
 #include <linux/printk.h>
 #include <linux/hrtimer.h>
-#include <linux/state_notifier.h>
 #include "governor.h"
 
 static struct class *devfreq_class;
@@ -42,15 +41,6 @@ static LIST_HEAD(devfreq_governor_list);
 /* The list of all device-devfreq */
 static LIST_HEAD(devfreq_list);
 static DEFINE_MUTEX(devfreq_list_lock);
-
-/* List of devices to boost when the screen is woken */
-static const char *boost_devices[] = {
-	"soc:qcom,cpubw",
-};
-
-#define WAKE_BOOST_DURATION_MS (5000)
-static struct delayed_work wake_unboost_work;
-static struct work_struct wake_boost_work;
 
 /**
  * find_device_devfreq() - find devfreq struct using device pointer
@@ -209,11 +199,11 @@ int update_devfreq(struct devfreq *devfreq)
 	if (!devfreq->governor)
 		return -EINVAL;
 
-	/* Reevaluate the proper frequency */
-	if (devfreq->do_wake_boost) {
-		/* Use the max freq when the screen is turned on */
-		freq = UINT_MAX;
+	if (devfreq->max_boost) {
+		/* Use the max freq for max boosts */
+		freq = ULONG_MAX;
 	} else {
+		/* Reevaluate the proper frequency */
 		err = devfreq->governor->get_target_freq(devfreq, &freq, &flags);
 		if (err)
 			return err;
@@ -486,7 +476,7 @@ struct devfreq *devfreq_add_device(struct device *dev,
 {
 	struct devfreq *devfreq;
 	struct devfreq_governor *governor;
-	int i, err = 0;
+	int err = 0;
 
 	if (!dev || !profile || !governor_name) {
 		dev_err(dev, "%s: Invalid parameters.\n", __func__);
@@ -557,13 +547,6 @@ struct devfreq *devfreq_add_device(struct device *dev,
 		goto err_init;
 	}
 	mutex_unlock(&devfreq_list_lock);
-
-	for (i = 0; i < ARRAY_SIZE(boost_devices); i++) {
-		if (!strcmp(dev_name(dev), boost_devices[i])) {
-			devfreq->needs_wake_boost = true;
-			break;
-		}
-	}
 
 	return devfreq;
 
@@ -843,12 +826,13 @@ static ssize_t governor_store(struct device *dev, struct device_attribute *attr,
 		return -EINVAL;
 
 	/* Governor white list */
-	if (strncmp(str_governor, "cpufreq", DEVFREQ_NAME_LEN) &&
-		strncmp(str_governor, "msm-adreno-tz", DEVFREQ_NAME_LEN) &&
+	if (strncmp(str_governor, "bw_hwmon", DEVFREQ_NAME_LEN) &&
+		strncmp(str_governor, "cpufreq", DEVFREQ_NAME_LEN) &&
 		strncmp(str_governor, "performance", DEVFREQ_NAME_LEN) &&
 		strncmp(str_governor, "powersave", DEVFREQ_NAME_LEN) &&
-		strncmp(str_governor, "simple_ondemand", DEVFREQ_NAME_LEN) &&
-		strncmp(str_governor, "userspace", DEVFREQ_NAME_LEN))
+		strncmp(str_governor, "mem_latency", DEVFREQ_NAME_LEN) &&
+		strncmp(str_governor, "msm-adreno-tz", DEVFREQ_NAME_LEN) &&
+		strncmp(str_governor, "simple_ondemand", DEVFREQ_NAME_LEN))
 		return -EINVAL;
 
 	mutex_lock(&devfreq_list_lock);
@@ -968,6 +952,10 @@ static ssize_t min_freq_store(struct device *dev, struct device_attribute *attr,
 	unsigned long value;
 	int ret;
 	unsigned long max;
+
+	/* Minfreq is managed by devfreq_boost */
+	if (df->is_boost_device)
+		return count;
 
 	ret = sscanf(buf, "%lu", &value);
 	if (ret != 1)
@@ -1124,77 +1112,15 @@ static struct attribute *devfreq_attrs[] = {
 };
 ATTRIBUTE_GROUPS(devfreq);
 
-static void set_wake_boost(bool enable)
-{
-	struct devfreq *df;
-
-	mutex_lock(&devfreq_list_lock);
-	list_for_each_entry(df, &devfreq_list, node) {
-		if (!df->needs_wake_boost)
-			continue;
-
-/*
-		pr_info("Device: %s Boost: %d\n", dev_name(&df->dev),
-				enable);
-*/
-
-		mutex_lock(&df->lock);
-		df->do_wake_boost = enable;
-		update_devfreq(df);
-		mutex_unlock(&df->lock);
-	}
-	mutex_unlock(&devfreq_list_lock);
-}
-
-static void wake_boost_fn(struct work_struct *work)
-{
-	set_wake_boost(true);
-	schedule_delayed_work(&wake_unboost_work,
-			msecs_to_jiffies(WAKE_BOOST_DURATION_MS));
-}
-
-static void wake_unboost_fn(struct work_struct *work)
-{
-	set_wake_boost(false);
-}
-
-static int state_notifier_callback(struct notifier_block *this,
-				unsigned long event, void *data)
-{
-	switch (event) {
-		case STATE_NOTIFIER_BOOST:
-		case STATE_NOTIFIER_ACTIVE:
-			schedule_work(&wake_boost_work);
-			break;
-		case STATE_NOTIFIER_SUSPEND:
-			cancel_work_sync(&wake_boost_work);
-			if (cancel_delayed_work_sync(&wake_unboost_work))
-				set_wake_boost(false);
-			break;
-		default:
-			break;
-	}
-
-	return NOTIFY_OK;
-}
-
-static struct notifier_block notif = {
-	.notifier_call = state_notifier_callback,
-	.priority = INT_MAX,
-};
-
 static int __init devfreq_init(void)
 {
-	int ret = 0;
-
 	devfreq_class = class_create(THIS_MODULE, "devfreq");
 	if (IS_ERR(devfreq_class)) {
 		pr_err("%s: couldn't create class\n", __FILE__);
 		return PTR_ERR(devfreq_class);
 	}
 
-	devfreq_wq =
-	    alloc_workqueue("devfreq_wq",
+	devfreq_wq = alloc_workqueue("devfreq_wq",
 			    WQ_HIGHPRI | WQ_UNBOUND | WQ_FREEZABLE |
 			    WQ_MEM_RECLAIM, 0);
 	if (!devfreq_wq) {
@@ -1204,11 +1130,7 @@ static int __init devfreq_init(void)
 	}
 	devfreq_class->dev_groups = devfreq_groups;
 
-	INIT_WORK(&wake_boost_work, wake_boost_fn);
-	INIT_DELAYED_WORK(&wake_unboost_work, wake_unboost_fn);
-	ret = state_register_client(&notif);
-
-	return ret;
+	return 0;
 }
 subsys_initcall(devfreq_init);
 
